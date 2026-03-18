@@ -6,7 +6,7 @@
   <title>Sistema Online de Avaliação - Matemática e Física</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <!-- MathJax Configuração Corrigida -->
+  <!-- MathJax Configuração -->
   <script>
     window.MathJax = {
       tex: {
@@ -56,8 +56,11 @@
       text-align: center;
     }
     .header h1 {
-      font-size: 2.5em;
+      font-size: 3em;
       margin-bottom: 10px;
+      text-shadow: 2px 2px 0 #2c3e50, 4px 4px 0 #34495e, 6px 6px 0 #1a252f;
+      transform: perspective(500px) rotateX(2deg);
+      letter-spacing: 2px;
     }
     .tab-container {
       display: flex;
@@ -150,6 +153,13 @@
     .question h3 {
       color: #2c3e50;
       margin-bottom: 15px;
+    }
+    .question-image {
+      max-width: 100%;
+      max-height: 300px;
+      margin: 10px 0;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     .options {
       display: grid;
@@ -430,6 +440,11 @@
             <label for="newQuestion">Nova Questão (use $...$ para fórmulas matemáticas):</label>
             <textarea id="newQuestion" placeholder="Digite a questão" rows="3"></textarea>
           </div>
+          <!-- NOVO: Campo para URL da imagem -->
+          <div class="form-group">
+            <label for="questionImage">URL da Imagem (opcional):</label>
+            <input type="url" id="questionImage" placeholder="https://exemplo.com/imagem.jpg">
+          </div>
           <div class="form-group">
             <label>Opções (use $...$ para fórmulas matemáticas):</label>
             <input type="text" id="optionA" placeholder="Opção A">
@@ -482,45 +497,8 @@
 
     window.mathJaxReady = false;
 
-    // Estrutura da questão agora inclui 'subject'
-    let questions = JSON.parse(localStorage.getItem('quizQuestions')) || [
-      // MATRIZES (Matemática)
-      {
-        question: "Se $A = \\begin{bmatrix} 2 & 3 \\\\ 1 & 4 \\end{bmatrix}$ e $B = \\begin{bmatrix} 5 & 1 \\\\ 2 & 3 \\end{bmatrix}$, qual é o resultado de $A + B$?",
-        options: [
-          "$\\begin{bmatrix} 7 & 4 \\\\ 3 & 7 \\end{bmatrix}$",
-          "$\\begin{bmatrix} 3 & 4 \\\\ 3 & 7 \\end{bmatrix}$",
-          "$\\begin{bmatrix}7 & 3 \\\\ 4 & 7 \\end{bmatrix}$",
-          "$\\begin{bmatrix}7 & 4 \\\\ 3 & 1 \\end{bmatrix}$"
-        ],
-        correct: 0,
-        subject: "math"
-      },
-      {
-        question: "Dada a matriz $C = \\begin{bmatrix} 4 & 2 \\\\ 1 & 3 \\end{bmatrix}$, qual é o valor do determinante de $C$?",
-        options: ["10", "12", "14", "16"],
-        correct: 0,
-        subject: "math"
-      },
-      {
-        question: "Qual é a matriz transposta de $D = \\begin{bmatrix} 1 & 4 & 7 \\\\ 3 & 6 & 9 \\end{bmatrix}$?",
-        options: [
-          "$\\begin{bmatrix} 1 & 3 \\\\ 4 & 6 \\\\ 7 & 9 \\end{bmatrix}$",
-          "$\\begin{bmatrix} 1 & 4 & 7 \\\\ 3 & 6 & 9 \\end{bmatrix}$",
-          "$\\begin{bmatrix} 9 & 6 & 3 \\\\ 8 & 5 & 2 \\end{bmatrix}$",
-          "$\\begin{bmatrix} 3 & 2 & 1 \\\\ 6 & 5 & 4 \\\\ 9 & 8 & 7 \\end{bmatrix}$"
-        ],
-        correct: 0,
-        subject: "math"
-      },
-      // Exemplo de questão de Física
-      {
-        question: "Um carro parte do repouso e atinge a velocidade de 20 m/s em 5 segundos. Qual é a sua aceleração média?",
-        options: ["2 m/s²", "4 m/s²", "5 m/s²", "10 m/s²"],
-        correct: 0,
-        subject: "physics"
-      }
-    ];
+    // Estrutura da questão agora inclui 'subject' e 'imageUrl' (opcional)
+    let questions = JSON.parse(localStorage.getItem('quizQuestions')) || []; // Inicia vazio
 
     // Armazenamento de resultados
     let results = JSON.parse(localStorage.getItem('quizResults')) || [];
@@ -646,9 +624,16 @@
       const question = filteredQuestions[currentQuestion];
       const questionsArea = document.getElementById('questionsArea');
 
+      // Monta HTML da questão, incluindo imagem se houver
+      let imageHtml = '';
+      if (question.imageUrl) {
+        imageHtml = `<img src="${question.imageUrl}" alt="Imagem da questão" class="question-image" onerror="this.style.display='none'">`;
+      }
+
       questionsArea.innerHTML = `
         <div class="question">
           <h3>Questão ${currentQuestion + 1} de ${filteredQuestions.length}</h3>
+          ${imageHtml}
           <div class="math-display math-loading">
             ${question.question}
           </div>
@@ -783,7 +768,8 @@
           options: q.options,
           correct: q.correct,
           studentAnswer: studentAnswers[idx],
-          isCorrect: studentAnswers[idx] === q.correct
+          isCorrect: studentAnswers[idx] === q.correct,
+          imageUrl: q.imageUrl // guarda também a url da imagem
         }))
       };
 
@@ -894,7 +880,7 @@
       }, 2000);
     }
 
-    // Compartilhamento WhatsApp (original)
+    // Compartilhamento WhatsApp
     function shareResultsWhatsApp() {
       const name = document.getElementById('studentName').value;
       const school = document.getElementById('school').value;
@@ -908,7 +894,7 @@
       window.open(whatsappUrl, '_blank');
     }
 
-    // NOVO: Compartilhamento por e-mail
+    // Compartilhamento por e-mail
     function shareResultsEmail() {
       const name = document.getElementById('studentName').value;
       const school = document.getElementById('school').value;
@@ -982,10 +968,11 @@ Avaliação de ${subject}.`;
       questionsList.innerHTML = '<h4>Questões Cadastradas:</h4>';
       questions.forEach((question, index) => {
         const subjectName = question.subject === 'math' ? 'Matemática' : 'Física';
+        const hasImage = question.imageUrl ? '🖼️ ' : '';
         const questionItem = document.createElement('div');
         questionItem.className = 'question-item';
         questionItem.innerHTML = `
-          <strong>Q${index + 1} (${subjectName})</strong> ${question.question.substring(0, 80)}... <br>
+          <strong>${hasImage}Q${index + 1} (${subjectName})</strong> ${question.question.substring(0, 80)}... <br>
           <small>Resposta: ${String.fromCharCode(65 + question.correct)}</small>
           <button class="btn btn-danger" onclick="deleteQuestion(${index})" style="float: right; padding: 5px 10px; font-size: 12px;">🗑️ Excluir</button>
         `;
@@ -1002,6 +989,7 @@ Avaliação de ${subject}.`;
       const optionD = document.getElementById('optionD').value.trim();
       const correctAnswer = parseInt(document.getElementById('correctAnswer').value);
       const subject = document.getElementById('questionSubject').value;
+      const imageUrl = document.getElementById('questionImage').value.trim() || ''; // Novo campo
 
       if (!newQuestion || !optionA || !optionB || !optionC || !optionD) {
         alert('Por favor, preencha todos os campos!');
@@ -1012,7 +1000,8 @@ Avaliação de ${subject}.`;
         question: newQuestion,
         options: [optionA, optionB, optionC, optionD],
         correct: correctAnswer,
-        subject: subject
+        subject: subject,
+        imageUrl: imageUrl // salva a URL da imagem
       });
 
       localStorage.setItem('quizQuestions', JSON.stringify(questions));
@@ -1023,6 +1012,7 @@ Avaliação de ${subject}.`;
       document.getElementById('optionB').value = '';
       document.getElementById('optionC').value = '';
       document.getElementById('optionD').value = '';
+      document.getElementById('questionImage').value = '';
 
       await loadQuestionsList();
       alert('Questão adicionada com sucesso!');
