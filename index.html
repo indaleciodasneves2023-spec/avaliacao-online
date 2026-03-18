@@ -409,6 +409,7 @@
           <p id="resultMessage"></p>
           <button class="btn btn-success" onclick="shareResultsWhatsApp()">📱 Compartilhar WhatsApp</button>
           <button class="btn btn-warning" onclick="shareResultsEmail()">📧 Compartilhar E-mail</button>
+          <button class="btn btn-info" onclick="copyResultsToClipboard()">📋 Copiar Resultado</button>
           <button class="btn" onclick="resetQuiz()">Nova Tentativa</button>
         </div>
       </div>
@@ -509,17 +510,19 @@
     let currentSubject = 'math';
     let filteredQuestions = [];
 
-    // Função para processar MathJax em um elemento
+    // Função melhorada para processar MathJax
     async function processMathJax(element) {
-      return new Promise(resolve => {
-        setTimeout(() => {
-          if (window.MathJax && window.mathJaxReady) {
-            MathJax.typesetPromise(element).then(resolve).catch(() => resolve());
-          } else {
-            resolve();
-          }
-        }, 500);
-      });
+      if (!window.MathJax) {
+        console.warn('MathJax não disponível');
+        return;
+      }
+      try {
+        await MathJax.startup.promise; // aguarda inicialização completa
+        await MathJax.typesetPromise(element);
+        console.log('MathJax processado');
+      } catch (error) {
+        console.error('Erro no MathJax:', error);
+      }
     }
 
     // Funções para atualizar os campos dependentes
@@ -654,15 +657,12 @@
         </div>
       `;
 
-      try {
-        await processMathJax(questionsArea);
-        const mathDisplay = questionsArea.querySelector('.math-display');
-        if (mathDisplay) {
-          mathDisplay.classList.remove('math-loading');
-          mathDisplay.classList.add('math-loaded');
-        }
-      } catch (error) {
-        console.error('Erro ao processar MathJax:', error);
+      // Processar MathJax na nova área
+      await processMathJax(questionsArea);
+      const mathDisplay = questionsArea.querySelector('.math-display');
+      if (mathDisplay) {
+        mathDisplay.classList.remove('math-loading');
+        mathDisplay.classList.add('math-loaded');
       }
       canAnswer = true;
     }
@@ -894,7 +894,7 @@
       window.open(whatsappUrl, '_blank');
     }
 
-    // Compartilhamento por e-mail
+    // Compartilhamento por e-mail (tenta abrir mailto)
     function shareResultsEmail() {
       const name = document.getElementById('studentName').value;
       const school = document.getElementById('school').value;
@@ -918,6 +918,37 @@ Avaliação de ${subject}.`;
       
       const mailtoUrl = `mailto:${TEACHER_EMAIL}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(body)}`;
       window.open(mailtoUrl, '_blank');
+      
+      // Instrução adicional caso o mailto não funcione
+      alert('Se o cliente de e-mail não abrir, copie o resultado usando o botão "Copiar" e cole manualmente.');
+    }
+
+    // NOVO: Copiar resultado para área de transferência
+    function copyResultsToClipboard() {
+      const name = document.getElementById('studentName').value;
+      const school = document.getElementById('school').value;
+      const educationLevel = document.getElementById('educationLevel').value;
+      const studentClass = document.getElementById('studentClass').value;
+      const subject = document.getElementById('subject').value === 'math' ? 'Matemática' : 'Física';
+      const score = document.getElementById('finalScore').textContent;
+      const percentage = (parseInt(score.split('/')[0]) / parseInt(score.split('/')[1]) * 100).toFixed(1);
+      
+      const text = `Resultado da Avaliação de ${subject}
+
+Aluno: ${name}
+Escola: ${getSchoolFullName(school)}
+Nível: ${educationLevel}
+Turma: ${studentClass}
+Nota: ${score} (${percentage}%)
+Data: ${new Date().toLocaleDateString('pt-BR')}
+
+Avaliação de ${subject}.`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Resultado copiado para a área de transferência! Agora cole no seu e-mail.');
+      }).catch(() => {
+        alert('Não foi possível copiar automaticamente. Selecione o texto abaixo e copie manualmente:\n\n' + text);
+      });
     }
 
     function getSchoolFullName(schoolCode) {
@@ -1109,17 +1140,22 @@ Avaliação de ${subject}.`;
       }
     }
 
-    // Inicialização
-    if (window.MathJax) {
-      MathJax.startup.promise.then(() => {
-        window.mathJaxReady = true;
-        console.log('MathJax inicializado com sucesso');
-        const studentTab = document.getElementById('studentTab');
-        if (studentTab && !studentTab.classList.contains('hidden')) processMathJax(studentTab);
-      }).catch((error) => {
-        console.error('Erro ao inicializar MathJax:', error);
-      });
-    }
+    // Inicialização: aguarda MathJax e depois processa a aba inicial
+    (async function init() {
+      if (window.MathJax) {
+        try {
+          await MathJax.startup.promise;
+          window.mathJaxReady = true;
+          console.log('MathJax inicializado com sucesso');
+          const studentTab = document.getElementById('studentTab');
+          if (studentTab && !studentTab.classList.contains('hidden')) {
+            await processMathJax(studentTab);
+          }
+        } catch (error) {
+          console.error('Erro ao inicializar MathJax:', error);
+        }
+      }
+    })();
 
     document.addEventListener('DOMContentLoaded', function() {
       console.log('Sistema de Avaliação carregado!');
