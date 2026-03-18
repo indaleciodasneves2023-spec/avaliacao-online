@@ -117,6 +117,7 @@
       cursor: pointer;
       transition: background 0.3s ease;
       margin-right: 10px;
+      margin-bottom: 10px;
     }
     .btn:hover {
       background: #2980b9;
@@ -132,6 +133,12 @@
     }
     .btn-danger:hover {
       background: #c0392b;
+    }
+    .btn-warning {
+      background: #f39c12;
+    }
+    .btn-warning:hover {
+      background: #e67e22;
     }
     .question {
       background: #f8f9fa;
@@ -262,6 +269,75 @@
       margin-bottom: 20px;
       color: #2c3e50;
     }
+    .teacher-subtab {
+      display: flex;
+      margin-bottom: 20px;
+      background: #ecf0f1;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .teacher-subtab button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: #ecf0f1;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+    .teacher-subtab button.active {
+      background: #3498db;
+      color: white;
+    }
+    .result-item {
+      background: #f8f9fa;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #27ae60;
+      cursor: pointer;
+    }
+    .result-item:hover {
+      background: #e9ecef;
+    }
+    .result-detail {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .result-question {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 5px;
+    }
+    .result-question.correct {
+      background: #d4edda;
+    }
+    .result-question.incorrect {
+      background: #f8d7da;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .stat-card {
+      background: #3498db;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-card h4 {
+      margin-bottom: 10px;
+    }
+    .stat-card .number {
+      font-size: 32px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -298,7 +374,6 @@
             <option value="">Selecione sua turma/série</option>
           </select>
         </div>
-        <!-- NOVO: Campo de disciplina -->
         <div class="form-group">
           <label for="subject">Disciplina:</label>
           <select id="subject">
@@ -322,7 +397,8 @@
           <h2>Avaliação Concluída!</h2>
           <div class="score" id="finalScore">0/0</div>
           <p id="resultMessage"></p>
-          <button class="btn btn-success" onclick="shareResults()">Compartilhar Resultado</button>
+          <button class="btn btn-success" onclick="shareResultsWhatsApp()">📱 Compartilhar WhatsApp</button>
+          <button class="btn btn-warning" onclick="shareResultsEmail()">📧 Compartilhar E-mail</button>
           <button class="btn" onclick="resetQuiz()">Nova Tentativa</button>
         </div>
       </div>
@@ -342,7 +418,13 @@
       </div>
       <div id="teacherPanel" class="hidden">
         <h2>Painel do Professor</h2>
-        <div class="teacher-panel">
+        <div class="teacher-subtab">
+          <button id="subtabQuestions" class="active" onclick="showTeacherSubtab('questions')">Questões</button>
+          <button id="subtabResults" onclick="showTeacherSubtab('results')">Resultados</button>
+        </div>
+
+        <!-- Sub-aba: Gerenciar Questões -->
+        <div id="teacherQuestions" class="teacher-panel">
           <h3>Gerenciar Questões</h3>
           <div class="form-group">
             <label for="newQuestion">Nova Questão (use $...$ para fórmulas matemáticas):</label>
@@ -355,7 +437,6 @@
             <input type="text" id="optionC" placeholder="Opção C">
             <input type="text" id="optionD" placeholder="Opção D">
           </div>
-          <!-- NOVO: Campo de disciplina para a questão -->
           <div class="form-group">
             <label for="questionSubject">Disciplina:</label>
             <select id="questionSubject">
@@ -377,6 +458,15 @@
             <!-- Lista de questões será gerada aqui -->
           </div>
         </div>
+
+        <!-- Sub-aba: Resultados -->
+        <div id="teacherResults" class="teacher-panel hidden">
+          <h3>Resultados dos Alunos</h3>
+          <button class="btn" onclick="loadResults()">Atualizar Lista</button>
+          <button class="btn btn-danger" onclick="clearAllResults()">Limpar Todos os Resultados</button>
+          <div id="resultsStats"></div>
+          <div id="resultsList"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -388,6 +478,7 @@
     // Configuração inicial
     const TEACHER_PASSWORD = "prof123";
     const TEACHER_WHATSAPP = "+5594991446645";
+    const TEACHER_EMAIL = "indaleciodasneves2023@professor.to.gov.br";
 
     window.mathJaxReady = false;
 
@@ -431,10 +522,14 @@
       }
     ];
 
+    // Armazenamento de resultados
+    let results = JSON.parse(localStorage.getItem('quizResults')) || [];
+
     let currentQuestion = 0;
     let studentAnswers = [];
     let canAnswer = true;
-    let currentSubject = 'math'; // Armazena a disciplina escolhida
+    let currentSubject = 'math';
+    let filteredQuestions = [];
 
     // Função para processar MathJax em um elemento
     async function processMathJax(element) {
@@ -526,14 +621,12 @@
       }
 
       // Filtra questões pela disciplina escolhida
-      const filteredQuestions = questions.filter(q => q.subject === subject);
+      filteredQuestions = questions.filter(q => q.subject === subject);
       if (filteredQuestions.length === 0) {
         alert('Não há questões cadastradas para esta disciplina. Peça ao professor para adicionar.');
         return;
       }
 
-      // Salva as questões filtradas e a disciplina
-      window.filteredQuestions = filteredQuestions;
       currentSubject = subject;
       currentQuestion = 0;
       studentAnswers = [];
@@ -545,17 +638,17 @@
     }
 
     async function loadQuestion() {
-      if (currentQuestion >= window.filteredQuestions.length) {
+      if (currentQuestion >= filteredQuestions.length) {
         finishQuiz();
         return;
       }
 
-      const question = window.filteredQuestions[currentQuestion];
+      const question = filteredQuestions[currentQuestion];
       const questionsArea = document.getElementById('questionsArea');
 
       questionsArea.innerHTML = `
         <div class="question">
-          <h3>Questão ${currentQuestion + 1} de ${window.filteredQuestions.length}</h3>
+          <h3>Questão ${currentQuestion + 1} de ${filteredQuestions.length}</h3>
           <div class="math-display math-loading">
             ${question.question}
           </div>
@@ -569,7 +662,7 @@
           </div>
           <div id="feedbackMessage"></div>
           <div style="margin-top: 20px;">
-            ${currentQuestion < window.filteredQuestions.length - 1 
+            ${currentQuestion < filteredQuestions.length - 1 
               ? '<button class="btn" onclick="nextQuestion()" id="nextButton" style="display:none;">Próxima Questão →</button>' 
               : '<button class="btn btn-success" onclick="finishQuiz()" id="finishButton" style="display:none;">🏁 Finalizar Avaliação</button>'}
           </div>
@@ -600,7 +693,7 @@
       event.target.classList.add('selected');
       studentAnswers[currentQuestion] = answerIndex;
 
-      const correctIndex = window.filteredQuestions[currentQuestion].correct;
+      const correctIndex = filteredQuestions[currentQuestion].correct;
       const feedbackMessage = document.getElementById('feedbackMessage');
 
       if (answerIndex !== correctIndex) {
@@ -611,7 +704,7 @@
         setTimeout(() => { nextQuestion(); }, 2000);
       } else {
         feedbackMessage.innerHTML = '<div class="feedback-message feedback-correct">✅ Resposta correta!</div>';
-        if (currentQuestion < window.filteredQuestions.length - 1) {
+        if (currentQuestion < filteredQuestions.length - 1) {
           document.getElementById('nextButton').style.display = 'inline-block';
         } else {
           document.getElementById('finishButton').style.display = 'inline-block';
@@ -627,7 +720,7 @@
     }
 
     function finishQuiz() {
-      if (studentAnswers[currentQuestion] === undefined && currentQuestion < window.filteredQuestions.length) {
+      if (studentAnswers[currentQuestion] === undefined && currentQuestion < filteredQuestions.length) {
         alert('Por favor, selecione uma resposta para esta questão!');
         return;
       }
@@ -636,13 +729,13 @@
       document.getElementById('resultsContainer').classList.remove('hidden');
 
       let score = 0;
-      window.filteredQuestions.forEach((question, index) => {
+      filteredQuestions.forEach((question, index) => {
         if (studentAnswers[index] === question.correct) score++;
       });
 
       const finalScore = document.getElementById('finalScore');
-      finalScore.textContent = `${score}/${window.filteredQuestions.length}`;
-      const percentage = (score / window.filteredQuestions.length) * 100;
+      finalScore.textContent = `${score}/${filteredQuestions.length}`;
+      const percentage = (score / filteredQuestions.length) * 100;
       const message = document.getElementById('resultMessage');
 
       if (percentage >= 80) {
@@ -660,12 +753,45 @@
         message.style.color = "#e74c3c";
       }
 
+      // Salvar resultado
+      saveResult(score, filteredQuestions.length, percentage);
+
       setTimeout(() => {
         alert('Avaliação finalizada com sucesso! Seu resultado está pronto para ser compartilhado.');
       }, 1000);
     }
 
-    // Funções de som (idênticas ao original, mantive)
+    function saveResult(score, total, percentage) {
+      const name = document.getElementById('studentName').value.trim();
+      const school = document.getElementById('school').value;
+      const educationLevel = document.getElementById('educationLevel').value;
+      const studentClass = document.getElementById('studentClass').value;
+      const subject = document.getElementById('subject').value === 'math' ? 'Matemática' : 'Física';
+
+      const resultDetail = {
+        studentName: name,
+        school: school,
+        educationLevel: educationLevel,
+        studentClass: studentClass,
+        subject: subject,
+        date: new Date().toISOString(),
+        score: score,
+        total: total,
+        percentage: percentage.toFixed(1),
+        questions: filteredQuestions.map((q, idx) => ({
+          question: q.question,
+          options: q.options,
+          correct: q.correct,
+          studentAnswer: studentAnswers[idx],
+          isCorrect: studentAnswers[idx] === q.correct
+        }))
+      };
+
+      results.push(resultDetail);
+      localStorage.setItem('quizResults', JSON.stringify(results));
+    }
+
+    // Funções de som (idênticas ao original)
     function playErrorSound() {
       const audioIndicator = document.getElementById('audioIndicator');
       audioIndicator.style.display = 'block';
@@ -768,7 +894,8 @@
       }, 2000);
     }
 
-    function shareResults() {
+    // Compartilhamento WhatsApp (original)
+    function shareResultsWhatsApp() {
       const name = document.getElementById('studentName').value;
       const school = document.getElementById('school').value;
       const educationLevel = document.getElementById('educationLevel').value;
@@ -779,6 +906,32 @@
       const message = `Resultado da Avaliação de ${subject}\n\nAluno: ${name}\nEscola: ${getSchoolFullName(school)}\nNível: ${educationLevel}\nTurma: ${studentClass}\nNota: ${score} (${percentage}%)\nData: ${new Date().toLocaleDateString('pt-BR')}\n\nAvaliação de ${subject}.`;
       const whatsappUrl = `https://wa.me/${TEACHER_WHATSAPP}?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
+    }
+
+    // NOVO: Compartilhamento por e-mail
+    function shareResultsEmail() {
+      const name = document.getElementById('studentName').value;
+      const school = document.getElementById('school').value;
+      const educationLevel = document.getElementById('educationLevel').value;
+      const studentClass = document.getElementById('studentClass').value;
+      const subject = document.getElementById('subject').value === 'math' ? 'Matemática' : 'Física';
+      const score = document.getElementById('finalScore').textContent;
+      const percentage = (parseInt(score.split('/')[0]) / parseInt(score.split('/')[1]) * 100).toFixed(1);
+      
+      const subjectLine = `Resultado da Avaliação - ${name} - ${subject}`;
+      const body = `Resultado da Avaliação de ${subject}
+
+Aluno: ${name}
+Escola: ${getSchoolFullName(school)}
+Nível: ${educationLevel}
+Turma: ${studentClass}
+Nota: ${score} (${percentage}%)
+Data: ${new Date().toLocaleDateString('pt-BR')}
+
+Avaliação de ${subject}.`;
+      
+      const mailtoUrl = `mailto:${TEACHER_EMAIL}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(body)}`;
+      window.open(mailtoUrl, '_blank');
     }
 
     function getSchoolFullName(schoolCode) {
@@ -801,8 +954,26 @@
         document.getElementById('teacherLogin').classList.add('hidden');
         document.getElementById('teacherPanel').classList.remove('hidden');
         loadQuestionsList();
+        loadResults(); // Carrega resultados ao entrar
       } else {
         alert('Senha incorreta! Tente novamente.');
+      }
+    }
+
+    function showTeacherSubtab(subtab) {
+      document.getElementById('subtabQuestions').classList.remove('active');
+      document.getElementById('subtabResults').classList.remove('active');
+      document.getElementById('teacherQuestions').classList.add('hidden');
+      document.getElementById('teacherResults').classList.add('hidden');
+
+      if (subtab === 'questions') {
+        document.getElementById('subtabQuestions').classList.add('active');
+        document.getElementById('teacherQuestions').classList.remove('hidden');
+        loadQuestionsList();
+      } else {
+        document.getElementById('subtabResults').classList.add('active');
+        document.getElementById('teacherResults').classList.remove('hidden');
+        loadResults();
       }
     }
 
@@ -863,6 +1034,88 @@
         localStorage.setItem('quizQuestions', JSON.stringify(questions));
         await loadQuestionsList();
         alert('Questão excluída!');
+      }
+    }
+
+    // Funções para resultados
+    function loadResults() {
+      const resultsList = document.getElementById('resultsList');
+      const statsDiv = document.getElementById('resultsStats');
+      
+      if (results.length === 0) {
+        resultsList.innerHTML = '<p>Nenhum resultado registrado ainda.</p>';
+        statsDiv.innerHTML = '';
+        return;
+      }
+
+      // Estatísticas gerais
+      const totalAlunos = results.length;
+      const mediaGeral = (results.reduce((acc, r) => acc + (r.score / r.total * 100), 0) / totalAlunos).toFixed(1);
+      const totalQuestoesRespondidas = results.reduce((acc, r) => acc + r.total, 0);
+      const totalAcertos = results.reduce((acc, r) => acc + r.score, 0);
+      const percentualAcertoGeral = ((totalAcertos / totalQuestoesRespondidas) * 100).toFixed(1);
+
+      statsDiv.innerHTML = `
+        <div class="stats">
+          <div class="stat-card">
+            <h4>Total de Avaliações</h4>
+            <div class="number">${totalAlunos}</div>
+          </div>
+          <div class="stat-card">
+            <h4>Média de Aproveitamento</h4>
+            <div class="number">${mediaGeral}%</div>
+          </div>
+          <div class="stat-card">
+            <h4>Acertos Totais</h4>
+            <div class="number">${totalAcertos}/${totalQuestoesRespondidas}</div>
+            <div>(${percentualAcertoGeral}%)</div>
+          </div>
+        </div>
+      `;
+
+      // Lista de resultados
+      let html = '<h4>Registros:</h4>';
+      results.forEach((res, idx) => {
+        html += `
+          <div class="result-item" onclick="toggleResultDetail(${idx})">
+            <strong>${res.studentName}</strong> - ${res.subject} - ${res.score}/${res.total} (${res.percentage}%)<br>
+            <small>${new Date(res.date).toLocaleString('pt-BR')} - ${res.educationLevel} - ${res.studentClass}</small>
+          </div>
+          <div id="result-detail-${idx}" class="result-detail hidden">
+            <button class="btn btn-danger" onclick="deleteResult(${idx})" style="float:right;">Excluir</button>
+            <h4>Detalhes das Questões</h4>
+            ${res.questions.map((q, qIdx) => `
+              <div class="result-question ${q.isCorrect ? 'correct' : 'incorrect'}">
+                <strong>Questão ${qIdx+1}</strong> ${q.isCorrect ? '✅' : '❌'}<br>
+                <small>${q.question.substring(0, 100)}...</small><br>
+                <small>Resposta do aluno: ${String.fromCharCode(65 + q.studentAnswer)}</small><br>
+                <small>Resposta correta: ${String.fromCharCode(65 + q.correct)}</small>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      });
+      resultsList.innerHTML = html;
+    }
+
+    function toggleResultDetail(index) {
+      const detail = document.getElementById(`result-detail-${index}`);
+      if (detail) detail.classList.toggle('hidden');
+    }
+
+    function deleteResult(index) {
+      if (confirm('Excluir este resultado?')) {
+        results.splice(index, 1);
+        localStorage.setItem('quizResults', JSON.stringify(results));
+        loadResults();
+      }
+    }
+
+    function clearAllResults() {
+      if (confirm('Tem certeza que deseja limpar TODOS os resultados?')) {
+        results = [];
+        localStorage.setItem('quizResults', JSON.stringify(results));
+        loadResults();
       }
     }
 
